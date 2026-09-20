@@ -1,18 +1,76 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { DefaultTheme, ThemeProvider } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-SplashScreen.preventAutoHideAsync();
+import { migrateDatabase } from '@/database/migrate';
+const diaryTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: '#F8F6F1',
+    card: '#F8F6F1',
+    border: '#E5E0D6',
+    text: '#24231F',
+  },
+};
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const [isDatabaseReady, setIsDatabaseReady] = useState(false);
+  const [databaseError, setDatabaseError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    migrateDatabase()
+      .then(() => setIsDatabaseReady(true))
+      .catch((error: unknown) => {
+        setDatabaseError(error instanceof Error ? error : new Error('Database setup failed.'));
+      });
+  }, []);
+
+  if (databaseError) {
+    return (
+      <View style={styles.statusScreen}>
+        <Text style={styles.statusTitle}>Unable to open your diary</Text>
+        <Text style={styles.statusMessage}>{databaseError.message}</Text>
+      </View>
+    );
+  }
+
+  if (!isDatabaseReady) {
+    return (
+      <View style={styles.statusScreen}>
+        <ActivityIndicator color="#A6513F" />
+        <Text style={styles.statusMessage}>Preparing your diary…</Text>
+      </View>
+    );
+  }
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
+    <ThemeProvider value={diaryTheme}>
       <AppTabs />
+      <StatusBar style="dark" />
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  statusScreen: {
+    alignItems: 'center',
+    backgroundColor: '#F8F6F1',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  statusTitle: {
+    color: '#24231F',
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  statusMessage: {
+    color: '#77736B',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+});

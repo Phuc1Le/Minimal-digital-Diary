@@ -1,7 +1,5 @@
-import { DefaultTheme, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-
-import AppTabs from '@/components/app-tabs';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
@@ -48,7 +46,29 @@ export default function TabLayout() {
   }
   return (
     <ThemeProvider value={diaryTheme}>
-      <AppTabs />
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="entry/new"
+          options={{
+            presentation: 'modal',
+            title: 'New Entry',
+            headerStyle: { backgroundColor: '#F8F6F1' },
+            headerShadowVisible: false,
+            headerTitleStyle: { color: '#24231F', fontWeight: '600' },
+          }}
+        />
+        <Stack.Screen
+          name="entry/[id]"
+          options={{
+            presentation: 'modal',
+            title: 'Edit Entry',
+            headerStyle: { backgroundColor: '#F8F6F1' },
+            headerShadowVisible: false,
+            headerTitleStyle: { color: '#24231F', fontWeight: '600' },
+          }}
+        />
+      </Stack>
       <StatusBar style="dark" />
     </ThemeProvider>
   );

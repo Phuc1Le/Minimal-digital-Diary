@@ -1,14 +1,16 @@
 import { router, Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import DateTimePicker from '@expo/ui/community/datetime-picker';
 import {
   Keyboard,
   KeyboardAvoidingView,
+  Image,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  ScrollView,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
@@ -16,23 +18,41 @@ import {
 import { entryCategories, type EntryCategory, type entries } from '@/database/schema';
 import type { TextEntryInput } from '@/services/entryService';
 import { FeedbackDialog } from '@/components/feedback-dialog';
+import { deleteStoredPhoto, pickAndStorePhotos, takeAndStorePhoto } from '@/services/photoService';
+import { PhotoViewer } from '@/components/photo-viewer';
 
 type Entry = typeof entries.$inferSelect;
 
 type EntryEditorProps = {
   initialEntry?: Entry;
+  initialPhotoPaths?: string[];
   onDelete?: () => Promise<void>;
+  onRemovePhoto?: (entryId: number, filePath: string) => Promise<void>;
   onSave: (input: TextEntryInput) => Promise<Entry>;
 };
 
-export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps) {
+export function EntryEditor({ initialEntry, initialPhotoPaths = [], onDelete, onRemovePhoto, onSave }: EntryEditorProps) {
   const [category, setCategory] = useState<EntryCategory>(initialEntry?.category ?? 'activity');
+  const [currentEntryId, setCurrentEntryId] = useState<number | null>(initialEntry?.id ?? null);
   const [content, setContent] = useState(initialEntry?.content ?? '');
   const [entryTime, setEntryTime] = useState(initialEntry?.entryTime ?? new Date());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPickingDate, setIsPickingDate] = useState(false);
+  const [photoPaths, setPhotoPaths] = useState<string[]>(initialPhotoPaths);
+  const [pendingPhotoPaths, setPendingPhotoPaths] = useState<string[]>([]);
+  const [viewedPhotoPath, setViewedPhotoPath] = useState<string | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardWillShow', () => setIsKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener('keyboardWillHide', () => setIsKeyboardVisible(false));
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   const [dialog, setDialog] = useState<'saved' | 'unsaved' | 'delete' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -41,9 +61,11 @@ export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps
     setIsSaving(true);
 
     try {
-      const savedEntry = await onSave({ category, content, entryTime });
+      const savedEntry = await onSave({ category, content, entryTime, photoPaths: pendingPhotoPaths });
+      setCurrentEntryId(savedEntry.id);
       setEntryTime(savedEntry.entryTime);
       setHasUnsavedChanges(false);
+      setPendingPhotoPaths([]);
 
       if (showConfirmation) setDialog('saved');
       return true;
@@ -100,6 +122,31 @@ export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps
     setHasUnsavedChanges(true);
   }
 
+  async function addPhotos(source: 'library' | 'camera') {
+    try {
+      const pickedPaths = source === 'library' ? await pickAndStorePhotos() : await takeAndStorePhoto();
+      if (pickedPaths.length > 0) {
+        setPhotoPaths((current) => [...current, ...pickedPaths]);
+        setPendingPhotoPaths((current) => [...current, ...pickedPaths]);
+        setHasUnsavedChanges(true);
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to add photos.');
+    }
+  }
+
+  async function removePhoto(filePath: string) {
+    try {
+      if (pendingPhotoPaths.includes(filePath)) await deleteStoredPhoto(filePath);
+      else if (currentEntryId && onRemovePhoto) await onRemovePhoto(currentEntryId, filePath);
+      setPhotoPaths((current) => current.filter((path) => path !== filePath));
+      setPendingPhotoPaths((current) => current.filter((path) => path !== filePath));
+      setHasUnsavedChanges(true);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to remove this photo.');
+    }
+  }
+
   return (
     <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
       <KeyboardAvoidingView
@@ -116,6 +163,7 @@ export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps
           }}
         />
 
+        <>
         <View style={styles.dateRow}>
           <View>
             <Text style={styles.label}>DATE</Text>
@@ -157,6 +205,7 @@ export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps
             );
           })}
         </View>
+        </>
 
         <Text style={[styles.label, styles.entryLabel]}>ENTRY</Text>
         <TextInput
@@ -171,6 +220,25 @@ export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps
           textAlignVertical="top"
           value={content}
         />
+
+        {!isKeyboardVisible ? <View style={styles.photoSection}>
+          <View style={styles.photoActions}>
+            <Pressable accessibilityRole="button" onPress={() => void addPhotos('library')} style={styles.photoButton}><Text style={styles.photoButtonText}>Choose photo</Text></Pressable>
+            <Pressable accessibilityRole="button" onPress={() => void addPhotos('camera')} style={styles.photoButton}><Text style={styles.photoButtonText}>Take photo</Text></Pressable>
+          </View>
+          {photoPaths.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoList}>
+              {photoPaths.map((filePath) => (
+                <View key={filePath} style={styles.photoTile}>
+                  <Pressable onPress={() => setViewedPhotoPath(filePath)}><Image source={{ uri: filePath }} style={styles.photoPreview} /></Pressable>
+                  <Pressable accessibilityLabel="Remove photo" accessibilityRole="button" onPress={() => void removePhoto(filePath)} style={styles.photoDeleteButton}>
+                    <Text style={styles.photoDeleteButtonText}>×</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
+        </View> : null}
 
         <Pressable
           accessibilityRole="button"
@@ -187,7 +255,10 @@ export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps
         ) : null}
 
         <FeedbackDialog
-          actions={[{ label: 'Keep writing', onPress: () => setDialog(null) }]}
+          actions={[
+            { label: 'Keep writing', onPress: () => setDialog(null), tone: 'secondary' },
+            { label: 'Done', onPress: () => router.dismissAll() },
+          ]}
           message="Your entry is saved and remains open for editing."
           title="Entry saved"
           visible={dialog === 'saved'}
@@ -216,6 +287,7 @@ export function EntryEditor({ initialEntry, onDelete, onSave }: EntryEditorProps
           title="Unable to save entry"
           visible={errorMessage !== null}
         />
+        <PhotoViewer filePath={viewedPhotoPath} onClose={() => setViewedPhotoPath(null)} />
       </KeyboardAvoidingView>
     </TouchableWithoutFeedback>
   );
@@ -236,6 +308,15 @@ const styles = StyleSheet.create({
   categoryButtonTextSelected: { color: '#A6513F' },
   entryLabel: { marginTop: 28 },
   editor: { backgroundColor: '#FFFFFF', borderColor: '#E5E0D6', borderRadius: 16, borderWidth: 1, color: '#24231F', flex: 1, fontSize: 17, lineHeight: 25, marginTop: 10, padding: 16 },
+  photoSection: { marginTop: 12 },
+  photoActions: { flexDirection: 'row', gap: 8 },
+  photoButton: { alignItems: 'center', borderColor: '#A6513F', borderRadius: 12, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 42 },
+  photoButtonText: { color: '#A6513F', fontSize: 15, fontWeight: '600' },
+  photoList: { marginTop: 10 },
+  photoTile: { height: 70, marginRight: 8, position: 'relative', width: 70 },
+  photoPreview: { borderRadius: 10, height: 70, width: 70 },
+  photoDeleteButton: { alignItems: 'center', backgroundColor: '#7A2E24', borderColor: '#FFFFFF', borderRadius: 11, borderWidth: 1.5, height: 22, justifyContent: 'center', position: 'absolute', right: -5, top: -5, width: 22 },
+  photoDeleteButtonText: { color: '#FFFFFF', fontSize: 18, lineHeight: 19 },
   saveButton: { alignItems: 'center', backgroundColor: '#A6513F', borderRadius: 16, justifyContent: 'center', marginTop: 16, minHeight: 56 },
   buttonDisabled: { opacity: 0.65 },
   saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },

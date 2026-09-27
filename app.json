@@ -35,6 +35,8 @@
         }
       ],
       "expo-sqlite",
+      ["expo-image-picker", { "photosPermission": "Diary uses your selected photos only to attach them to private diary entries.", "cameraPermission": "Diary uses your camera only when you choose to add a photo to a private diary entry." }],
+      ["expo-media-library", { "savePhotosPermission": "Diary saves a photo to your library only when you choose Save." }],
       "expo-image",
       "expo-web-browser"
     ],

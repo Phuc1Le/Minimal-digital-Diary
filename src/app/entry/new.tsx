@@ -2,6 +2,7 @@ import { EntryEditor } from '@/components/entry-editor';
 import { useState } from 'react';
 
 import { createTextEntry, type TextEntryInput, updateTextEntry } from '@/services/entryService';
+import { removePhotoFromEntry } from '@/services/photoService';
 
 export default function NewEntryScreen() {
   const [savedEntryId, setSavedEntryId] = useState<number | null>(null);
@@ -15,5 +16,5 @@ export default function NewEntryScreen() {
     return savedEntry;
   }
 
-  return <EntryEditor onSave={saveEntry} />;
+  return <EntryEditor onRemovePhoto={removePhotoFromEntry} onSave={saveEntry} />;
 }

@@ -62,12 +62,13 @@ export default function TabLayout() {
           name="entry/[id]"
           options={{
             presentation: 'modal',
-            title: 'Edit Entry',
+            title: 'Entry',
             headerStyle: { backgroundColor: '#F8F6F1' },
             headerShadowVisible: false,
             headerTitleStyle: { color: '#24231F', fontWeight: '600' },
           }}
         />
+        <Stack.Screen name="entry/[id]/edit" options={{ title: 'Edit Entry', headerStyle: { backgroundColor: '#F8F6F1' }, headerShadowVisible: false, headerTitleStyle: { color: '#24231F', fontWeight: '600' } }} />
       </Stack>
       <StatusBar style="dark" />
     </ThemeProvider>
